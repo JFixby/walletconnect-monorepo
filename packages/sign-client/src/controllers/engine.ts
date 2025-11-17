@@ -186,10 +186,14 @@ export class Engine extends IEngine {
       this.client.core.pairing.register({ methods: Object.keys(ENGINE_RPC_OPTS) });
       this.initialized = true;
       setTimeout(async () => {
-        await this.processPendingMessageEvents();
+        try {
+          await this.processPendingMessageEvents();
 
-        this.sessionRequestQueue.queue = this.getPendingSessionRequests();
-        this.processSessionRequestQueue();
+          this.sessionRequestQueue.queue = this.getPendingSessionRequests();
+          this.processSessionRequestQueue();
+        } catch (error) {
+          this.client.logger.error(error);
+        }
       }, toMiliseconds(this.requestQueueDelay));
     }
   };
@@ -1888,7 +1892,9 @@ export class Engine extends IEngine {
 
   private registerRelayerEvents() {
     this.client.core.relayer.on(RELAYER_EVENTS.message, (event: RelayerTypes.MessageEvent) => {
-      this.onProviderMessageEvent(event);
+      this.onProviderMessageEvent(event).catch((error) => {
+        this.client.logger.error(error);
+      });
     });
   }
 
@@ -2307,7 +2313,7 @@ export class Engine extends IEngine {
       
       // PATCH: Handle missing sessions gracefully (race condition - session deleted before update arrives)
       try {
-        this.isValidUpdate({ topic, ...params });
+        await this.isValidUpdate({ topic, ...params });
       } catch (validationError: any) {
         // If session doesn't exist, log warning and return early (don't send error response)
         if (validationError?.message?.includes("session topic doesn't exist") || 
@@ -2556,7 +2562,7 @@ export class Engine extends IEngine {
 
       // PATCH: Handle missing sessions gracefully (race condition - session deleted before event arrives)
       try {
-        this.isValidEmit({ topic, ...params });
+        await this.isValidEmit({ topic, ...params });
       } catch (validationError: any) {
         // If session doesn't exist, log warning and return early (don't send error response)
         if (validationError?.message?.includes("session topic doesn't exist") || 
@@ -2744,22 +2750,26 @@ export class Engine extends IEngine {
 
   private registerExpirerEvents() {
     this.client.core.expirer.on(EXPIRER_EVENTS.expired, async (event: ExpirerTypes.Expiration) => {
-      const { topic, id } = parseExpirerTarget(event.target);
-      if (id && this.client.pendingRequest.keys.includes(id)) {
-        return await this.deletePendingSessionRequest(id, getInternalError("EXPIRED"), true);
-      }
-      if (id && this.client.auth.requests.keys.includes(id)) {
-        return await this.deletePendingAuthRequest(id, getInternalError("EXPIRED"), true);
-      }
-
-      if (topic) {
-        if (this.client.session.keys.includes(topic)) {
-          await this.deleteSession({ topic, expirerHasDeleted: true });
-          this.client.events.emit("session_expire", { topic });
+      try {
+        const { topic, id } = parseExpirerTarget(event.target);
+        if (id && this.client.pendingRequest.keys.includes(id)) {
+          return await this.deletePendingSessionRequest(id, getInternalError("EXPIRED"), true);
         }
-      } else if (id) {
-        await this.deleteProposal(id, true);
-        this.client.events.emit("proposal_expire", { id });
+        if (id && this.client.auth.requests.keys.includes(id)) {
+          return await this.deletePendingAuthRequest(id, getInternalError("EXPIRED"), true);
+        }
+
+        if (topic) {
+          if (this.client.session.keys.includes(topic)) {
+            await this.deleteSession({ topic, expirerHasDeleted: true });
+            this.client.events.emit("session_expire", { topic });
+          }
+        } else if (id) {
+          await this.deleteProposal(id, true);
+          this.client.events.emit("proposal_expire", { id });
+        }
+      } catch (error) {
+        this.client.logger.error(error);
       }
     });
   }

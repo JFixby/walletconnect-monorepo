@@ -2164,7 +2164,10 @@ export class Engine extends IEngine {
       const target = engineEvent("session_connect", id);
       const listeners = this.events.listenerCount(target);
       if (listeners === 0) {
-        throw new Error(`emitting ${target} without any listeners, 954`);
+        // PATCH: Log warning instead of throwing to prevent crashes
+        // The listener may have already been called or there's a race condition
+        this.client.logger.warn(`No listeners for ${target}, skipping emit (listener may have already been called or race condition)`);
+        return;
       }
       this.events.emit(target, { error: payload.error });
     }
@@ -2320,7 +2323,10 @@ export class Engine extends IEngine {
     const target = engineEvent("session_update", id);
     const listeners = this.events.listenerCount(target);
     if (listeners === 0) {
-      throw new Error(`emitting ${target} without any listeners`);
+      // PATCH: Log warning instead of throwing to prevent crashes
+      // The listener may have already been called or there's a race condition
+      this.client.logger.warn(`No listeners for ${target}, skipping emit (listener may have already been called or race condition)`);
+      return;
     }
     if (isJsonRpcResult(payload)) {
       this.events.emit(engineEvent("session_update", id), {});
@@ -2358,7 +2364,10 @@ export class Engine extends IEngine {
     const target = engineEvent("session_extend", id);
     const listeners = this.events.listenerCount(target);
     if (listeners === 0) {
-      throw new Error(`emitting ${target} without any listeners`);
+      // PATCH: Log warning instead of throwing to prevent crashes
+      // The listener may have already been called or there's a race condition
+      this.client.logger.warn(`No listeners for ${target}, skipping emit (listener may have already been called or race condition)`);
+      return;
     }
     if (isJsonRpcResult(payload)) {
       this.events.emit(engineEvent("session_extend", id), {});
@@ -2397,7 +2406,11 @@ export class Engine extends IEngine {
     setTimeout(() => {
       const listeners = this.events.listenerCount(target);
       if (listeners === 0) {
-        throw new Error(`emitting ${target} without any listeners 2176`);
+        // PATCH: Log warning instead of throwing to prevent Lambda crashes
+        // The listener may have already been called (.once() removes it) or there's a race condition
+        // External code should listen to the generic "session_ping" event emitted in onSessionPingRequest
+        this.client.logger.warn(`No listeners for ${target}, skipping emit (listener may have already been called or race condition)`);
+        return;
       }
 
       if (isJsonRpcResult(payload)) {
@@ -2477,7 +2490,10 @@ export class Engine extends IEngine {
     const target = engineEvent("session_request", id);
     const listeners = this.events.listenerCount(target);
     if (listeners === 0) {
-      throw new Error(`emitting ${target} without any listeners`);
+      // PATCH: Log warning instead of throwing to prevent crashes
+      // The listener may have already been called or there's a race condition
+      this.client.logger.warn(`No listeners for ${target}, skipping emit (listener may have already been called or race condition)`);
+      return;
     }
     if (isJsonRpcResult(payload)) {
       this.events.emit(engineEvent("session_request", id), { result: payload.result });

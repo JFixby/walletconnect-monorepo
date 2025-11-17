@@ -13,11 +13,15 @@ const CAPABILITIES_KEYS = [
 ];
 
 const hexToDecimal = (hex?: string) => {
-  return hex && hex.startsWith("0x") ? BigInt(hex).toString(10) : hex;
+  // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
+  if (!hex || typeof hex !== 'string') return hex;
+  return hex.startsWith("0x") ? BigInt(hex).toString(10) : hex;
 };
 
 const decimalToHex = (decimal: string) => {
-  return decimal && decimal.startsWith("0x") ? decimal : `0x${BigInt(decimal).toString(16)}`;
+  // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
+  if (!decimal || typeof decimal !== 'string') return decimal;
+  return decimal.startsWith("0x") ? decimal : `0x${BigInt(decimal).toString(16)}`;
 };
 
 const getCapabilitiesFromObject = (object: Record<string, any>) => {

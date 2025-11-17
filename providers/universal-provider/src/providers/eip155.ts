@@ -165,7 +165,12 @@ class Eip155Provider implements IProvider {
 
   private async handleSwitchChain(args: RequestParams): Promise<any> {
     let hexChainId = args.request.params ? args.request.params[0]?.chainId : "0x0";
-    hexChainId = hexChainId.startsWith("0x") ? hexChainId : `0x${hexChainId}`;
+    // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
+    if (typeof hexChainId === 'string') {
+      hexChainId = hexChainId.startsWith("0x") ? hexChainId : `0x${hexChainId}`;
+    } else {
+      hexChainId = `0x${String(hexChainId)}`;
+    }
     const parsedChainId = parseInt(hexChainId, 16);
     // if chainId is already approved, switch locally
     if (this.isChainApproved(parsedChainId)) {

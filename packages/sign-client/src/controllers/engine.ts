@@ -3479,14 +3479,17 @@ export class Engine extends IEngine {
 
       // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
       // data might be undefined, null, number, or object instead of string
-      if (typeof data !== 'string' || !data.startsWith("0x")) return false;
+      if (!data || typeof data !== 'string') return false;
+      if (!data.startsWith("0x")) return false;
 
       const hexPart = data.slice(2);
       if (!/^[0-9a-fA-F]*$/.test(hexPart)) return false;
 
       return hexPart.length % 2 === 0;
-    } catch (e) {}
-    return false;
+    } catch (e) {
+      // PATCH: Catch any errors (including startsWith errors) and return false
+      return false;
+    }
   };
 
   private extractTxHashesFromResult = (

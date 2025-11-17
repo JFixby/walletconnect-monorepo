@@ -23,8 +23,13 @@ const hexToDecimal = (hex?: string) => {
 
 const decimalToHex = (decimal: string) => {
   // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
-  if (!decimal || typeof decimal !== 'string') return decimal;
-  return decimal.startsWith("0x") ? decimal : `0x${BigInt(decimal).toString(16)}`;
+  if (!decimal || typeof decimal !== 'string') {
+    return decimal;
+  }
+  if (decimal.startsWith("0x")) {
+    return decimal;
+  }
+  return `0x${BigInt(decimal).toString(16)}`;
 };
 
 const getCapabilitiesFromObject = (object: Record<string, any>) => {

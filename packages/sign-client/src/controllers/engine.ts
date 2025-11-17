@@ -710,7 +710,7 @@ export class Engine extends IEngine {
     const protocolMethod = "wc_sessionRequest";
     const appLink = this.getAppLinkIfEnabled(session.peer.metadata, session.transportType);
     if (appLink) {
-      await this.sendRequest({
+      this.sendRequest({
         clientRpcId,
         relayRpcId,
         topic,
@@ -725,14 +725,20 @@ export class Engine extends IEngine {
         expiry,
         throwOnFailedPublish: true,
         appLink,
-      }).catch((error) => reject(error));
-
-      this.client.events.emit("session_request_sent", {
-        topic,
-        request,
-        chainId,
-        id: clientRpcId,
+      }).catch((error) => {
+        // PATCH: Catch errors in sendRequest to prevent unhandled promise rejection
+        reject(error);
+      }).then(() => {
+        this.client.events.emit("session_request_sent", {
+          topic,
+          request,
+          chainId,
+          id: clientRpcId,
+        });
+      }).catch(() => {
+        // Error already handled above
       });
+
       const result = await done();
       return result;
     }
@@ -747,37 +753,63 @@ export class Engine extends IEngine {
 
     return await Promise.all([
       new Promise<void>(async (resolve) => {
-        await this.sendRequest({
-          clientRpcId,
-          relayRpcId,
-          topic,
-          method: protocolMethod,
-          params: protocolRequestParams,
-          expiry,
-          throwOnFailedPublish: true,
-          tvf: this.getTVFParams(clientRpcId, protocolRequestParams),
-        }).catch((error) => reject(error));
-        this.client.events.emit("session_request_sent", {
-          topic,
-          request,
-          chainId,
-          id: clientRpcId,
+        // PATCH: Wrap getTVFParams in Promise to handle synchronous errors (e.g., startsWith errors)
+        const tvfPromise = Promise.resolve().then(() => {
+          return this.getTVFParams(clientRpcId, protocolRequestParams);
+        }).catch((tvfError) => {
+          this.client.logger.warn(tvfError, "Error getting TVF params, continuing without TVF");
+          return undefined;
         });
-        resolve();
+        
+        tvfPromise.then((tvf) => {
+          return this.sendRequest({
+            clientRpcId,
+            relayRpcId,
+            topic,
+            method: protocolMethod,
+            params: protocolRequestParams,
+            expiry,
+            throwOnFailedPublish: true,
+            tvf,
+          });
+        }).catch((error) => {
+          reject(error);
+        }).then(() => {
+          this.client.events.emit("session_request_sent", {
+            topic,
+            request,
+            chainId,
+            id: clientRpcId,
+          });
+          resolve();
+        }).catch((error) => {
+          reject(error);
+        });
       }),
       new Promise<void>(async (resolve) => {
-        // only attempt to handle deeplinks if they are not explicitly disabled in the session config
-        if (!session.sessionConfig?.disableDeepLink) {
-          const wcDeepLink = (await getDeepLink(
-            this.client.core.storage,
-            WALLETCONNECT_DEEPLINK_CHOICE,
-          )) as string;
-          await handleDeeplinkRedirect({ id: clientRpcId, topic, wcDeepLink });
-        }
-        resolve();
+        // PATCH: Add promise handler for deeplink handling to prevent unhandled promise rejection
+        Promise.resolve().then(async () => {
+          // only attempt to handle deeplinks if they are not explicitly disabled in the session config
+          if (!session.sessionConfig?.disableDeepLink) {
+            const wcDeepLink = (await getDeepLink(
+              this.client.core.storage,
+              WALLETCONNECT_DEEPLINK_CHOICE,
+            )) as string;
+            await handleDeeplinkRedirect({ id: clientRpcId, topic, wcDeepLink });
+          }
+        }).catch((error) => {
+          // PATCH: Catch errors in deeplink handling to prevent unhandled promise rejection
+          this.client.logger.warn(error, "Error handling deeplink redirect");
+        }).finally(() => {
+          resolve(); // Resolve anyway to not block the main request
+        });
       }),
       done(),
-    ]).then((result) => result[2]); // order is important here, we want to return the result of the `done` promise
+    ]).then((result) => result[2]).catch((error) => {
+      // PATCH: Catch any errors from Promise.all to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error in request Promise.all");
+      throw error;
+    }); // order is important here, we want to return the result of the `done` promise
   };
 
   public respond: IEngine["respond"] = async (params) => {

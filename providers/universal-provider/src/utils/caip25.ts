@@ -14,18 +14,30 @@ const CAPABILITIES_KEYS = [
 
 const hexToDecimal = (hex?: string) => {
   // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
-  if (!hex || typeof hex !== 'string') {
-    // Return as string to ensure decimalToHex receives a string
-    return hex ? String(hex) : hex;
+  // Use explicit type guard that can't be optimized away by bundler
+  if (hex == null) {
+    return hex;
   }
+  const hexType = typeof hex;
+  if (hexType !== 'string') {
+    // Return as string to ensure decimalToHex receives a string
+    return String(hex);
+  }
+  // At this point we know hex is a string, safe to call startsWith
   return hex.startsWith("0x") ? BigInt(hex).toString(10) : hex;
 };
 
 const decimalToHex = (decimal: string) => {
   // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
-  if (!decimal || typeof decimal !== 'string') {
+  // Use explicit type guard that can't be optimized away by bundler
+  if (decimal == null) {
     return decimal;
   }
+  const decimalType = typeof decimal;
+  if (decimalType !== 'string') {
+    return decimal;
+  }
+  // At this point we know decimal is a string, safe to call startsWith
   if (decimal.startsWith("0x")) {
     return decimal;
   }

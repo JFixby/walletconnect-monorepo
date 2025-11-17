@@ -2304,7 +2304,20 @@ export class Engine extends IEngine {
         this.sendError({ id, topic, error: getSdkError("INVALID_UPDATE_REQUEST") });
         return;
       }
-      this.isValidUpdate({ topic, ...params });
+      
+      // PATCH: Handle missing sessions gracefully (race condition - session deleted before update arrives)
+      try {
+        this.isValidUpdate({ topic, ...params });
+      } catch (validationError: any) {
+        // If session doesn't exist, log warning and return early (don't send error response)
+        if (validationError?.message?.includes("session topic doesn't exist") || 
+            validationError?.message?.includes("NO_MATCHING_KEY")) {
+          this.client.logger.warn(`Session ${topic} not found in onSessionUpdateRequest (likely expired or already deleted)`);
+          return;
+        }
+        throw validationError;
+      }
+      
       try {
         MemoryStore.set(memoryKey, id);
         await this.client.session.update(topic, { namespaces: params.namespaces });
@@ -2313,8 +2326,13 @@ export class Engine extends IEngine {
           topic,
           result: true,
         });
-      } catch (e) {
+      } catch (e: any) {
         MemoryStore.delete(memoryKey);
+        // PATCH: Handle missing session in update() call (race condition)
+        if (e?.message?.includes("NO_MATCHING_KEY") || e?.message?.includes("session")) {
+          this.client.logger.warn(`Session ${topic} not found during update in onSessionUpdateRequest (likely expired or already deleted)`);
+          return;
+        }
         throw e;
       }
 
@@ -2536,7 +2554,19 @@ export class Engine extends IEngine {
         return;
       }
 
-      this.isValidEmit({ topic, ...params });
+      // PATCH: Handle missing sessions gracefully (race condition - session deleted before event arrives)
+      try {
+        this.isValidEmit({ topic, ...params });
+      } catch (validationError: any) {
+        // If session doesn't exist, log warning and return early (don't send error response)
+        if (validationError?.message?.includes("session topic doesn't exist") || 
+            validationError?.message?.includes("NO_MATCHING_KEY")) {
+          this.client.logger.warn(`Session ${topic} not found in onSessionEventRequest (likely expired or already deleted)`);
+          return;
+        }
+        throw validationError;
+      }
+      
       this.client.events.emit("session_event", { id, topic, params });
       MemoryStore.set(memoryKey, id);
     } catch (err: any) {
@@ -3437,7 +3467,9 @@ export class Engine extends IEngine {
     try {
       const data = params?.data || params?.[0]?.data;
 
-      if (!data.startsWith("0x")) return false;
+      // PATCH: Add type check before calling startsWith to prevent "startsWith is not a function" errors
+      // data might be undefined, null, number, or object instead of string
+      if (typeof data !== 'string' || !data.startsWith("0x")) return false;
 
       const hexPart = data.slice(2);
       if (!/^[0-9a-fA-F]*$/.test(hexPart)) return false;

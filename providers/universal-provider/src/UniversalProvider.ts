@@ -84,11 +84,13 @@ export class UniversalProvider implements IUniversalProvider {
     if (!this.session) {
       throw new Error("Please call connect() before request()");
     }
+    // PATCH: Ensure chainId is a string to prevent startsWith errors
+    const chainIdStr = typeof chainId === 'string' ? chainId : String(chainId);
     return (await this.getProvider(namespace).request({
       request: {
         ...args,
       },
-      chainId: `${namespace}:${chainId}`,
+      chainId: `${namespace}:${chainIdStr}`,
       topic: this.session.topic,
       expiry,
     }).catch((error) => {

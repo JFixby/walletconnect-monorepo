@@ -94,12 +94,24 @@ class Eip155Provider implements IProvider {
 
   public getDefaultChain(): string {
     if (this.chainId) return this.chainId.toString();
-    if (this.namespace.defaultChain) return this.namespace.defaultChain;
+    if (this.namespace.defaultChain) {
+      // PATCH: Ensure defaultChain is a string to prevent startsWith errors
+      return typeof this.namespace.defaultChain === 'string' 
+        ? this.namespace.defaultChain 
+        : String(this.namespace.defaultChain);
+    }
 
     const chainId = this.namespace.chains[0];
     if (!chainId) throw new Error(`ChainId not found`);
 
-    return chainId.split(":")[1];
+    // PATCH: Ensure chainId is a string before calling split to prevent errors
+    const chainIdStr = typeof chainId === 'string' ? chainId : String(chainId);
+    const parts = chainIdStr.split(":");
+    if (parts.length < 2) {
+      // If no colon, assume the whole value is the chainId
+      return chainIdStr;
+    }
+    return parts[1];
   }
 
   // ---------- Private ----------------------------------------------- //

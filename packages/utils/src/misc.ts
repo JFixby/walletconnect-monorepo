@@ -313,15 +313,31 @@ export function createDelayedPromise<T>(
   let cacheTimeout: undefined | NodeJS.Timeout;
   let result: Promise<Awaited<T>> | Promise<T> | undefined;
 
+  const reject = (value?: ErrorResponse) => {
+    if (cacheTimeout && cacheReject) {
+      clearTimeout(cacheTimeout);
+      cacheReject(value);
+    }
+  };
+
   const done = () =>
     new Promise<T>((promiseResolve, promiseReject) => {
       if (result) {
         return promiseResolve(result);
       }
       cacheTimeout = setTimeout(() => {
-        const err = new Error(expireErrorMessage);
-        result = Promise.reject(err);
-        promiseReject(err);
+        const err = new Error(expireErrorMessage || "Promise expired");
+        // Use the reject function to ensure proper cleanup (clears timeout)
+        // This prevents unhandled promise rejections by using the cached reject handler
+        // cacheReject should always be set at this point since it's set synchronously before setTimeout
+        if (cacheReject) {
+          // Clear timeout and reject using the proper handler
+          clearTimeout(cacheTimeout!);
+          cacheReject({ message: err.message, code: 0 });
+        } else {
+          // Fallback: reject the promise directly (should rarely happen)
+          promiseReject(err);
+        }
       }, timeout);
       cacheResolve = promiseResolve;
       cacheReject = promiseReject;
@@ -331,12 +347,6 @@ export function createDelayedPromise<T>(
       clearTimeout(cacheTimeout);
       cacheResolve(value as T);
       result = Promise.resolve(value) as Promise<Awaited<T>>;
-    }
-  };
-  const reject = (value?: ErrorResponse) => {
-    if (cacheTimeout && cacheReject) {
-      clearTimeout(cacheTimeout);
-      cacheReject(value);
     }
   };
 

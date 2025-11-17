@@ -753,26 +753,26 @@ export class Engine extends IEngine {
 
     return await Promise.all([
       new Promise<void>(async (resolve) => {
-        // PATCH: Wrap getTVFParams in Promise to handle synchronous errors (e.g., startsWith errors)
-        const tvfPromise = Promise.resolve().then(() => {
-          return this.getTVFParams(clientRpcId, protocolRequestParams);
-        }).catch((tvfError) => {
+        // PATCH: Wrap getTVFParams in try-catch to handle synchronous errors (e.g., startsWith errors)
+        let tvf;
+        try {
+          tvf = this.getTVFParams(clientRpcId, protocolRequestParams);
+        } catch (tvfError) {
           this.client.logger.warn(tvfError, "Error getting TVF params, continuing without TVF");
-          return undefined;
-        });
+          tvf = undefined;
+        }
         
-        tvfPromise.then((tvf) => {
-          return this.sendRequest({
-            clientRpcId,
-            relayRpcId,
-            topic,
-            method: protocolMethod,
-            params: protocolRequestParams,
-            expiry,
-            throwOnFailedPublish: true,
-            tvf,
-          });
+        this.sendRequest({
+          clientRpcId,
+          relayRpcId,
+          topic,
+          method: protocolMethod,
+          params: protocolRequestParams,
+          expiry,
+          throwOnFailedPublish: true,
+          tvf,
         }).catch((error) => {
+          // PATCH: Catch errors in sendRequest to prevent unhandled promise rejection
           reject(error);
         }).then(() => {
           this.client.events.emit("session_request_sent", {

@@ -752,7 +752,7 @@ export class Engine extends IEngine {
     };
 
     return await Promise.all([
-      new Promise<void>(async (resolve) => {
+      new Promise<void>((resolve, reject) => {
         // PATCH: Wrap getTVFParams in try-catch to handle synchronous errors (e.g., startsWith errors)
         let tvf;
         try {
@@ -786,7 +786,7 @@ export class Engine extends IEngine {
           reject(error);
         });
       }),
-      new Promise<void>(async (resolve) => {
+      new Promise<void>((resolve) => {
         // PATCH: Add promise handler for deeplink handling to prevent unhandled promise rejection
         Promise.resolve().then(async () => {
           // only attempt to handle deeplinks if they are not explicitly disabled in the session config
@@ -808,7 +808,8 @@ export class Engine extends IEngine {
     ]).then((result) => result[2]).catch((error) => {
       // PATCH: Catch any errors from Promise.all to prevent unhandled promise rejection
       this.client.logger.error(error, "Error in request Promise.all");
-      // Re-throw here because this is the main request flow and caller needs to handle it
+      // Reject the promise so caller knows the request failed
+      // The caller (executeHandlerAndSendResult) has a try-catch that will handle this
       throw error;
     }); // order is important here, we want to return the result of the `done` promise
   };

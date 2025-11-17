@@ -91,6 +91,11 @@ export class UniversalProvider implements IUniversalProvider {
       chainId: `${namespace}:${chainId}`,
       topic: this.session.topic,
       expiry,
+    }).catch((error) => {
+      // PATCH: Catch errors from request to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error in universal-provider request");
+      // Re-throw so caller (handleRequestToSign -> executeHandlerAndSendResult) can handle it
+      throw error;
     })) as T;
   }
 

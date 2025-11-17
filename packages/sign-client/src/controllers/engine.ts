@@ -808,6 +808,7 @@ export class Engine extends IEngine {
     ]).then((result) => result[2]).catch((error) => {
       // PATCH: Catch any errors from Promise.all to prevent unhandled promise rejection
       this.client.logger.error(error, "Error in request Promise.all");
+      // Re-throw here because this is the main request flow and caller needs to handle it
       throw error;
     }); // order is important here, we want to return the result of the `done` promise
   };
@@ -892,7 +893,11 @@ export class Engine extends IEngine {
           relayRpcId,
         }),
         done(),
-      ]);
+      ]).catch((error) => {
+        // PATCH: Catch errors in ping Promise.all to prevent unhandled promise rejection
+        this.client.logger.error(error, "Error in ping Promise.all");
+        // Don't rethrow - error is already handled by the event listener above
+      });
     } else if (this.client.core.pairing.pairings.keys.includes(topic)) {
       this.client.logger.warn(
         "ping() on pairing topic is deprecated and will be removed in the next major release.",
@@ -1002,7 +1007,11 @@ export class Engine extends IEngine {
     await Promise.all([
       this.client.auth.authKeys.set(AUTH_PUBLIC_KEY_NAME, { responseTopic, publicKey }),
       this.client.auth.pairingTopics.set(responseTopic, { topic: responseTopic, pairingTopic }),
-    ]);
+    ]).catch((error) => {
+      // PATCH: Catch errors in auth keys Promise.all to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error setting auth keys");
+      // Don't rethrow - log and continue, caller will handle if needed
+    });
 
     // Subscribe to response topic
     await this.client.core.relayer.subscribe(responseTopic, { transportType });
@@ -1235,7 +1244,11 @@ export class Engine extends IEngine {
             throwOnFailedPublish: true,
             clientRpcId: proposal.id,
           }),
-        ]);
+        ]).catch((error) => {
+          // PATCH: Catch errors in authenticate Promise.all to prevent unhandled promise rejection
+          this.client.logger.error(error, "Error in authenticate Promise.all");
+          // Don't rethrow - error will be handled by the catch block below
+        });
       }
     } catch (error) {
       // cleanup listeners on failed publish
@@ -1559,7 +1572,11 @@ export class Engine extends IEngine {
       this.getPendingSessionRequests()
         .filter((r) => r.topic === topic)
         .map((r) => this.deletePendingSessionRequest(r.id, getSdkError("USER_DISCONNECTED"))),
-    );
+    ).catch((error) => {
+      // PATCH: Catch errors in deletePendingSessionRequests Promise.all to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error deleting pending session requests");
+      // Don't rethrow - log error but continue cleanup
+    });
 
     if (emitEvent) this.client.events.emit("session_delete", { id, topic });
   };
@@ -1575,7 +1592,11 @@ export class Engine extends IEngine {
     await Promise.all([
       this.client.proposal.delete(id, getSdkError("USER_DISCONNECTED")),
       expirerHasDeleted ? Promise.resolve() : this.client.core.expirer.del(id),
-    ]);
+    ]).catch((error) => {
+      // PATCH: Catch errors in deleteProposal Promise.all to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error deleting proposal");
+      // Don't rethrow - log error but continue cleanup
+    });
     this.addToRecentlyDeleted(id, "proposal");
   };
 
@@ -1587,7 +1608,11 @@ export class Engine extends IEngine {
     await Promise.all([
       this.client.pendingRequest.delete(id, reason),
       expirerHasDeleted ? Promise.resolve() : this.client.core.expirer.del(id),
-    ]);
+    ]).catch((error) => {
+      // PATCH: Catch errors in deletePendingSessionRequest Promise.all to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error deleting pending session request");
+      // Don't rethrow - log error but continue cleanup
+    });
     this.addToRecentlyDeleted(id, "request");
     this.sessionRequestQueue.queue = this.sessionRequestQueue.queue.filter((r) => r.id !== id);
     if (expirerHasDeleted) {
@@ -1604,7 +1629,11 @@ export class Engine extends IEngine {
     await Promise.all([
       this.client.auth.requests.delete(id, reason),
       expirerHasDeleted ? Promise.resolve() : this.client.core.expirer.del(id),
-    ]);
+    ]).catch((error) => {
+      // PATCH: Catch errors in deletePendingAuthRequest Promise.all to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error deleting pending auth request");
+      // Don't rethrow - log error but continue cleanup
+    });
   };
 
   private setExpiry: EnginePrivate["setExpiry"] = async (topic, expiry) => {
@@ -1906,7 +1935,11 @@ export class Engine extends IEngine {
     await Promise.all([
       ...sessionTopics.map((topic) => this.deleteSession({ topic })),
       ...proposalIds.map((id) => this.deleteProposal(id)),
-    ]);
+    ]).catch((error) => {
+      // PATCH: Catch errors in cleanup Promise.all to prevent unhandled promise rejection
+      this.client.logger.error(error, "Error in cleanup Promise.all");
+      // Don't rethrow - log error but continue, cleanup is best-effort
+    });
   };
 
   private isInitialized() {

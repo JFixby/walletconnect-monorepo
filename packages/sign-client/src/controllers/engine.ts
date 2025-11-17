@@ -2203,10 +2203,19 @@ export class Engine extends IEngine {
       );
 
       if (!pendingSession) {
-        return this.client.logger.error(`Pending session not found for topic ${topic}`);
+        this.client.logger.warn(`Pending session not found for topic ${topic} (likely already settled or expired)`);
+        return;
       }
 
-      const proposal = this.client.proposal.get(pendingSession.proposalId);
+      let proposal;
+      try {
+        proposal = this.client.proposal.get(pendingSession.proposalId);
+      } catch (error) {
+        // Proposal may have been deleted (expired, rejected, or cleaned up)
+        // This is a race condition - settle request arrived after proposal was removed
+        this.client.logger.warn(`Proposal ${pendingSession.proposalId} not found in onSessionSettleRequest (likely expired or already processed)`);
+        return;
+      }
 
       const session: SessionTypes.Struct = {
         topic,

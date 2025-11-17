@@ -320,28 +320,51 @@ export function createDelayedPromise<T>(
     }
   };
 
-  const done = () =>
-    new Promise<T>((promiseResolve, promiseReject) => {
+  const done = () => {
+    const promise = new Promise<T>((promiseResolve, promiseReject) => {
       if (result) {
         return promiseResolve(result);
       }
       cacheTimeout = setTimeout(() => {
-        const err = new Error(expireErrorMessage || "Promise expired");
-        // Use the reject function to ensure proper cleanup (clears timeout)
-        // This prevents unhandled promise rejections by using the cached reject handler
-        // cacheReject should always be set at this point since it's set synchronously before setTimeout
-        if (cacheReject) {
-          // Clear timeout and reject using the proper handler
-          clearTimeout(cacheTimeout!);
-          cacheReject({ message: err.message, code: 0 });
-        } else {
-          // Fallback: reject the promise directly (should rarely happen)
-          promiseReject(err);
+        try {
+          const err = new Error(expireErrorMessage || "Promise expired");
+          // Use the reject function to ensure proper cleanup (clears timeout)
+          // This prevents unhandled promise rejections by using the cached reject handler
+          // cacheReject should always be set at this point since it's set synchronously before setTimeout
+          if (cacheReject) {
+            // Clear timeout and reject using the proper handler
+            // This ensures the promise is rejected through the proper channel
+            clearTimeout(cacheTimeout!);
+            cacheReject({ message: err.message, code: 0 });
+          } else {
+            // Fallback: reject the promise directly (should rarely happen)
+            // Wrap in try-catch to prevent unhandled rejections if promiseReject throws
+            try {
+              promiseReject(err);
+            } catch (rejectError) {
+              // If promiseReject fails, log but don't throw to prevent unhandled rejection
+              console.error("Failed to reject promise in timeout handler:", rejectError);
+            }
+          }
+        } catch (timeoutError) {
+          // Catch any errors in the timeout handler itself to prevent unhandled rejections
+          console.error("Error in createDelayedPromise timeout handler:", timeoutError);
         }
       }, timeout);
       cacheResolve = promiseResolve;
       cacheReject = promiseReject;
     });
+    
+    // Attach a catch handler to prevent unhandled promise rejections
+    // This ensures that even if the caller doesn't await/catch the promise,
+    // the rejection is handled and doesn't crash the application
+    promise.catch(() => {
+      // Silently catch - the error is already logged/emitted through the proper channels
+      // This prevents unhandled promise rejections from crashing the application
+    });
+    
+    return promise;
+  };
   const resolve = (value?: T) => {
     if (cacheTimeout && cacheResolve) {
       clearTimeout(cacheTimeout);

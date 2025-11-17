@@ -1937,7 +1937,7 @@ export class Engine extends IEngine {
       this.client.logger.error(
         `onRelayMessage() -> failed to process an inbound message: ${message}`,
       );
-      this.client.logger.error(error);
+      this.client.logger.error(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -2125,7 +2125,15 @@ export class Engine extends IEngine {
     if (isJsonRpcResult(payload)) {
       const { result } = payload;
       this.client.logger.trace({ type: "method", method: "onSessionProposeResponse", result });
-      const proposal = this.client.proposal.get(id);
+      let proposal;
+      try {
+        proposal = this.client.proposal.get(id);
+      } catch (error) {
+        // Proposal may have been deleted (expired, rejected, or cleaned up)
+        // This is a race condition - response arrived after proposal was removed
+        this.client.logger.warn(`Proposal ${id} not found in onSessionProposeResponse (likely expired or already processed)`);
+        return;
+      }
       this.client.logger.trace({ type: "method", method: "onSessionProposeResponse", proposal });
       const selfPublicKey = proposal.proposer.publicKey;
       this.client.logger.trace({
